@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Visual Field · VisionTrack AI{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>Visual field matched dataset</h1>
+    <p class="sub">PAPILA eyes with visual-field Mean Defect and VisionTrack structural measurements &mdash; input for Phase 2</p>
+  </div>
+</div>
+
+{% if not ready %}
+<section class="panel">
+  <div class="panel-body">
+    <p><b>The matched dataset has not been generated yet.</b></p>
+    <ol class="findings">
+      <li>Download PAPILA and extract it into <span class="mono">data\papila</span>.</li>
+      <li>Run <span class="mono">python scripts\prepare_papila_vf.py --papila data\papila</span>.</li>
+      <li>Reload this page.</li>
+    </ol>
+    <p class="muted small">Expected file: <span class="mono">{{ csv }}</span></p>
+  </div>
+</section>
+{% else %}
+
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Matched eyes</span><span class="kpi-value">{{ stats.n }}</span></div>
+  <div class="kpi"><span class="kpi-label">Patients</span><span class="kpi-value">{{ stats.patients }}</span></div>
+  <div class="kpi"><span class="kpi-label">Mean MD</span><span class="kpi-value">{{ '%.2f' % stats.md_mean if stats.md_mean is not none else '—' }}<small class="unit"> dB</small></span></div>
+  <div class="kpi"><span class="kpi-label">Correlation (V-CDR vs MD)</span><span class="kpi-value">{{ 'r = %.2f' % stats.r if stats.r is not none else '—' }}</span></div>
+</div>
+
+<div class="layout-2 wide-left">
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Structure vs function</h2>
+      <span class="legend"><i class="sw od"></i>OD <i class="sw os"></i>OS {% if stats.slope is not none %}<i class="ln fit"></i>Linear fit{% endif %}</span>
+    </div>
+    <div class="panel-body">
+    {% set W, H, L, R, T, B = 720, 380, 54, 16, 14, 44 %}
+    {% set span = md_hi - md_lo %}
+    <svg viewBox="0 0 {{ W }} {{ H }}" class="trend" role="img" aria-label="Vertical CDR versus mean defect">
+      {% set ns = namespace(g=md_lo) %}
+      {% for i in range(((span / 5)|int) + 1) %}
+        {% set gv = md_lo + i * 5 %}
+        {% set y = T + (md_hi - gv) / span * (H - T - B) %}
+        <line x1="{{ L }}" x2="{{ W - R }}" y1="{{ y }}" y2="{{ y }}" class="{{ 'zeroline' if gv == 0 else 'gridline' }}"/>
+        <text x="{{ L - 8 }}" y="{{ y + 4 }}" text-anchor="end">{{ gv|int }}</text>
+      {% endfor %}
+      {% for xv in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] %}
+        {% set x = L + xv * (W - L - R) %}
+        <line x1="{{ x }}" x2="{{ x }}" y1="{{ T }}" y2="{{ H - B }}" class="{{ 'refline' if xv == 0.6 else 'gridline' }}"/>
+        <text x="{{ x }}" y="{{ H - B + 16 }}" text-anchor="middle">{{ '%.1f' % xv }}</text>
+      {% endfor %}
+      <text x="{{ (L + W - R) / 2 }}" y="{{ H - 6 }}" text-anchor="middle" class="axis">Vertical cup-to-disc ratio (VisionTrack)</text>
+      <text x="14" y="{{ (T + H - B) / 2 }}" text-anchor="middle" class="axis" transform="rotate(-90 14 {{ (T + H - B) / 2 }})">Mean defect (dB)</text>
+      {% if stats.slope is not none %}
+        {% set y0 = [[stats.icpt, md_hi]|min, md_lo]|max %}
+        {% set y1 = [[stats.icpt + stats.slope, md_hi]|min, md_lo]|max %}
+        <line x1="{{ L }}" x2="{{ W - R }}" y1="{{ T + (md_hi - y0) / span * (H - T - B) }}" y2="{{ T + (md_hi - y1) / span * (H - T - B) }}" class="fitline"/>
+      {% endif %}
+      {% for p in pts %}
+        <circle cx="{{ L + ([p.vertical_cdr, 1]|min) * (W - L - R) }}" cy="{{ T + (md_hi - p.mean_defect) / span * (H - T - B) }}" r="4" class="dotpt {{ p.eye|lower }}"><title>{{ p.image }} · V-CDR {{ '%.3f' % p.vertical_cdr }} · MD {{ '%.2f' % p.mean_defect }} dB</title></circle>
+      {% endfor %}
+    </svg>
+    </div>
+    <p class="panel-note">Lower (more negative) mean defect indicates greater visual-field loss. A negative correlation means larger cupping goes with worse function.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>About this dataset</h2></div>
+    <div class="panel-body">
+      <table class="kv flush">
+        <tr><th>Source</th><td>PAPILA (Kovalyk et al., 2022)</td></tr>
+        <tr><th>Visual field test</th><td>Humphrey 750i, 30-2</td></tr>
+        <tr><th>Healthy / glaucoma / suspect</th><td>{{ stats.dx.get(0, 0) }} / {{ stats.dx.get(1, 0) }} / {{ stats.dx.get(2, 0) }}</td></tr>
+        <tr><th>Right / left eyes</th><td>{{ stats.od }} / {{ stats.os }}</td></tr>
+        <tr><th>Mean vertical CDR</th><td>{{ '%.3f' % stats.cdr_mean if stats.cdr_mean is not none else '—' }}</td></tr>
+        {% if stats.slope is not none %}<tr><th>Fit</th><td>MD = {{ '%.1f' % stats.slope }} &times; CDR {{ '+' if stats.icpt >= 0 else '−' }} {{ '%.1f' % stats.icpt|abs }}</td></tr>{% endif %}
+      </table>
+      <p class="hint" style="margin-top:12px">Only eyes with a recorded visual-field test are included. These structure&ndash;function pairs are the training data for Component 2 (CDR + visual field staging).</p>
+    </div>
+  </section>
+</div>
+
+{% if val %}
+{% macro pv(p) %}{{ 'p < 0.001' if p < 0.001 else 'p = %.3f' % p }}{% endmacro %}
+<section class="panel">
+  <div class="panel-head"><h2>Clinical validation</h2><span class="muted small">scripts/validate_structure_function.py</span></div>
+  <div class="valgrid">
+    <div class="valcol">
+      <h3>A. CDR accuracy</h3>
+      <table class="kv flush">
+        {% set a = val.smdg_agreement %}
+        <tr><th>SMDG test set (n = {{ a.n }})</th><td></td></tr>
+        <tr><th>MAE vs expert masks</th><td>{{ '%.3f' % a.mae }}</td></tr>
+        <tr><th>Pearson r / ICC</th><td>{{ '%.2f' % a.pearson_r }} / {{ '%.2f' % a.icc }}</td></tr>
+        <tr><th>Bias (95% limits)</th><td>{{ '%+.3f' % a.bias }} ({{ '%+.2f' % a.loa_low }} to {{ '%+.2f' % a.loa_high }})</td></tr>
+        <tr><th>Within ±0.10</th><td>{{ '%.1f' % (a.within_0_1 * 100) }}%</td></tr>
+        {% if val.papila_agreement %}{% set b = val.papila_agreement %}
+        <tr><th>PAPILA vs ophthalmologists (n = {{ b.n }})</th><td></td></tr>
+        <tr><th>MAE</th><td>{{ '%.3f' % b.mae }}</td></tr>
+        <tr><th>Pearson r / ICC</th><td>{{ '%.2f' % b.pearson_r }} / {{ '%.2f' % b.icc }}</td></tr>
+        <tr><th>Within ±0.10</th><td>{{ '%.1f' % (b.within_0_1 * 100) }}%</td></tr>
+        {% endif %}
+      </table>
+    </div>
+    <div class="valcol">
+      <h3>B. Structure&ndash;function</h3>
+      {% set c = val.correlation %}
+      <table class="kv flush">
+        <tr><th>Eyes with visual field</th><td>{{ c.n }}</td></tr>
+        <tr><th>Pearson r (CDR vs MD)</th><td>{{ '%.2f' % c.pearson_r }} ({{ pv(c.pearson_p) }})</td></tr>
+        <tr><th>Spearman &rho;</th><td>{{ '%.2f' % c.spearman_rho }} ({{ pv(c.spearman_p) }})</td></tr>
+        {% if c.expert_pearson_r is defined %}<tr><th>Ophthalmologists' CDR vs MD</th><td>r = {{ '%.2f' % c.expert_pearson_r }}</td></tr>{% endif %}
+        <tr><th>+0.1 CDR &asymp;</th><td>{{ '%.2f' % (c.slope / 10) }} dB MD</td></tr>
+        {% for st in val.severity.stages %}
+        <tr><th>{{ st.stage }}</th><td>{{ 'CDR %.2f (n = %d)' % (st.mean_cdr, st.n) if st.mean_cdr is not none else '—' }}</td></tr>
+        {% endfor %}
+        <tr><th>Across stages</th><td>Kruskal&ndash;Wallis {{ pv(val.severity.kruskal_p) }}</td></tr>
+        {% if val.functional_roc %}<tr><th>CDR detects MD &lt; &minus;6 dB</th><td>AUC {{ '%.2f' % val.functional_roc.auc }}</td></tr>{% endif %}
+      </table>
+    </div>
+  </div>
+  <div class="figgrid">
+    {% for f in figs %}
+    <a class="{{ 'wide' if f.startswith('A') }}" href="{{ url_for('static', filename='validation/' ~ f) }}" target="_blank"><img src="{{ url_for('static', filename='validation/' ~ f) }}" alt="{{ f }}" loading="lazy"></a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><h2>Matched cases</h2><span class="muted small">{{ rows|length }} eyes</span></div>
+  <div class="tablewrap tall">
+  <table class="grid">
+    <thead><tr>
+      <th>Image</th><th>Patient</th><th>Eye</th><th>Diagnosis</th><th class="num">Age</th><th class="num">IOP</th>
+      <th class="num">Mean defect (dB)</th><th class="num">V-CDR</th><th class="num">H-CDR</th><th class="num">Glaucoma prob.</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mono">{{ r.image }}</td>
+        <td>{{ r.patient }}</td><td>{{ r.eye }}</td>
+        <td>{% set d = r.diagnosis|int if r.diagnosis is not none else -1 %}{{ {0: 'Healthy', 1: 'Glaucoma', 2: 'Suspect'}.get(d, '—') }}</td>
+        <td class="num">{{ r.age|int if r.age is not none else '—' }}</td>
+        <td class="num">{{ '%.0f' % r.iop if r.iop is not none else '—' }}</td>
+        <td class="num {{ 'flag' if r.mean_defect is not none and r.mean_defect < -12 }}">{{ '%.2f' % r.mean_defect if r.mean_defect is not none else '—' }}</td>
+        <td class="num {{ 'flag' if r.vertical_cdr is not none and r.vertical_cdr >= cdr_flag }}">{{ '%.3f' % r.vertical_cdr if r.vertical_cdr is not none else '—' }}</td>
+        <td class="num">{{ '%.3f' % r.horizontal_cdr if r.horizontal_cdr is not none else '—' }}</td>
+        <td class="num">{{ '%.0f%%' % (r.glaucoma_probability * 100) if r.glaucoma_probability is not none else '—' }}</td>
+        <td class="num">
+          {% if images_ok %}
+          <form method="post" action="{{ url_for('visual_field_analyze', name=r.image) }}" class="inline-form">
+            <button class="btn sm" type="submit">Open study</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

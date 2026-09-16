@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Study {{ aid[:8] }} · VisionTrack AI{% endblock %}
+{% block content %}
+{% set c = r.component1.cdr %}
+{% set k = r.classification %}
+{% set v = c.vertical_cdr %}
+{% set img = 'results/' ~ aid ~ '/' %}
+
+<nav class="crumbs noprint">
+  <a href="{{ url_for('index') }}">Worklist</a><span>/</span>
+  <a href="{{ url_for('history', patient_id=r.patient_id) }}">{{ r.patient_id }}</a><span>/</span>
+  <span class="mono">{{ aid[:8] }}</span>
+</nav>
+
+<div class="pagehead">
+  <div>
+    <h1>Optic nerve head analysis</h1>
+    <p class="sub">Study <span class="mono">{{ aid }}</span></p>
+  </div>
+  <div class="actions noprint">
+    <button class="btn" onclick="window.print()">Print report</button>
+    <a class="btn" href="{{ url_for('result_json', aid=aid) }}">Export JSON</a>
+    <a class="btn primary" href="{{ url_for('index') }}#new">New analysis</a>
+  </div>
+</div>
+
+<section class="panel meta">
+  <dl>
+    <div><dt>Patient ID</dt><dd>{{ r.patient_id }}</dd></div>
+    <div><dt>Eye</dt><dd>{{ 'OD (right)' if r.eye == 'OD' else 'OS (left)' }}</dd></div>
+    <div><dt>Visit date</dt><dd>{{ r.visit_date }}</dd></div>
+    <div><dt>Analysed</dt><dd>{{ r.timestamp[:16]|replace('T', ' ') }} UTC</dd></div>
+    <div><dt>Source image</dt><dd class="trunc" title="{{ row.filename }}">{{ row.filename }}</dd></div>
+    <div><dt>Resolution</dt><dd>{{ r.image_size[0] }} &times; {{ r.image_size[1] }} px</dd></div>
+    <div><dt>Studies on record</dt><dd><a href="{{ url_for('history', patient_id=r.patient_id) }}">{{ visits }}</a></dd></div>
+  </dl>
+</section>
+
+{% for f in r.flags %}<div class="notice warn">{{ f }}</div>{% endfor %}
+
+<div class="layout-report">
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Fundus image</h2>
+      <div class="seg noprint" role="tablist" aria-label="Image layer">
+        <button class="on" data-src="{{ url_for('static', filename=img ~ 'overlay.png') }}" data-cap="Segmentation overlay">Overlay</button>
+        <button data-src="{{ url_for('static', filename=img ~ 'original.png') }}" data-cap="Original image">Original</button>
+        <button data-src="{{ url_for('static', filename=img ~ 'disc.png') }}" data-cap="Optic disc mask">Disc</button>
+        <button data-src="{{ url_for('static', filename=img ~ 'cup.png') }}" data-cap="Optic cup mask">Cup</button>
+      </div>
+    </div>
+    <div class="viewer">
+      <img id="viewer" src="{{ url_for('static', filename=img ~ 'overlay.png') }}" alt="Segmentation overlay">
+    </div>
+    <div class="viewer-foot">
+      <span id="viewcap">Segmentation overlay</span>
+      <span class="legend"><i class="sw disc"></i>Optic disc <i class="sw cup"></i>Optic cup</span>
+    </div>
+    <div class="printimgs">
+      <figure><img src="{{ url_for('static', filename=img ~ 'original.png') }}" alt=""><figcaption>Original</figcaption></figure>
+      <figure><img src="{{ url_for('static', filename=img ~ 'overlay.png') }}" alt=""><figcaption>Overlay</figcaption></figure>
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Optic disc (magnified)</h2></div>
+      <div class="roi"><img src="{{ url_for('static', filename=img ~ 'roi.png') }}" alt="Magnified optic disc"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Glaucoma risk</h2><span class="muted small">EfficientNet-B0</span></div>
+      <div class="panel-body">
+      {% if k %}
+        {% set pct = k.glaucoma_probability * 100 %}
+        <div class="riskline">
+          <span class="bignum">{{ '%.1f' % pct }}<small>%</small></span>
+          <span class="tag lg {{ k.risk_level|lower }}">{{ k.risk_level }} risk</span>
+        </div>
+        <div class="riskbar" aria-hidden="true">
+          {% for lo, hi, name in bands %}
+            <span class="band {{ name|lower }}" style="width: {{ ([hi, 1]|min - lo) * 100 }}%"></span>
+          {% endfor %}
+          <i class="marker" style="left: {{ pct }}%"></i>
+          <i class="thr" style="left: {{ k.threshold * 100 }}%" title="Decision threshold"></i>
+        </div>
+        <div class="scale"><span style="left:0">0</span><span style="left:35%">35</span><span style="left:65%">65</span><span style="left:100%">100</span></div>
+        <table class="kv">
+          <tr><th>Model output</th><td><b>{{ k.prediction }}</b></td></tr>
+          <tr><th>Decision threshold</th><td>{{ '%.2f' % k.threshold }}</td></tr>
+        </table>
+      {% else %}
+        <p class="muted">Classification model not loaded. Structural measurements only.</p>
+      {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="layout-2 even">
+  <section class="panel">
+    <div class="panel-head"><h2>Measurements</h2><span class="muted small">U-Net segmentation</span></div>
+    <table class="grid measures">
+      <thead><tr><th>Parameter</th><th class="num">Value</th><th>Reference</th></tr></thead>
+      <tbody>
+        <tr class="{{ 'rowflag' if v is not none and v >= cdr_flag }}">
+          <td>Vertical cup-to-disc ratio</td>
+          <td class="num strong">{{ '%.3f' % v if v is not none else '—' }}</td>
+          <td class="muted">&lt; {{ cdr_flag }}</td>
+        </tr>
+        <tr><td>Horizontal cup-to-disc ratio</td><td class="num strong">{{ '%.3f' % c.horizontal_cdr if c.horizontal_cdr is not none else '—' }}</td><td class="muted">—</td></tr>
+        <tr><td>Area cup-to-disc ratio</td><td class="num strong">{{ '%.3f' % c.area_cdr if c.area_cdr is not none else '—' }}</td><td class="muted">—</td></tr>
+        <tr><td>Disc height &times; width</td><td class="num">{{ c.disc_height }} &times; {{ c.disc_width }} px</td><td></td></tr>
+        <tr><td>Cup height &times; width</td><td class="num">{{ c.cup_height }} &times; {{ c.cup_width }} px</td><td></td></tr>
+        {% if r.visual_field and r.visual_field.mean_defect_db is not none %}
+        <tr><td>Visual field mean defect <span class="muted small">({{ r.visual_field.source }})</span></td>
+          <td class="num strong">{{ '%.2f' % r.visual_field.mean_defect_db }} dB</td><td class="muted">&gt; &minus;2 dB</td></tr>
+        {% endif %}
+        <tr><td>Disc / cup area</td><td class="num">{{ '{:,}'.format(c.disc_area) }} / {{ '{:,}'.format(c.cup_area) }} px²</td><td></td></tr>
+      </tbody>
+    </table>
+    {% if v is not none %}
+    <div class="panel-body">
+      <div class="cdrscale">
+        <div class="track"><span class="ok"></span><span class="mid"></span><span class="hi"></span><i style="left: {{ [v, 1]|min * 100 }}%"></i></div>
+        <div class="scale"><span style="left:0">0.0</span><span style="left:40%">0.4</span><span style="left:60%">0.6</span><span style="left:100%">1.0</span></div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Findings</h2><span class="muted small">Automatically generated</span></div>
+    <div class="panel-body">
+      <ol class="findings">
+      {% if v is none %}
+        <li>Optic disc could not be segmented reliably; cup-to-disc ratio not available. Consider re-imaging with the disc centred and in focus.</li>
+      {% else %}
+        {% if v >= cdr_flag %}
+        <li>Vertical CDR of <b>{{ '%.2f' % v }}</b> is at or above {{ cdr_flag }}, consistent with enlarged optic cupping.</li>
+        {% elif v >= 0.4 %}
+        <li>Vertical CDR of <b>{{ '%.2f' % v }}</b> is in the borderline range (0.4&ndash;{{ cdr_flag }}).</li>
+        {% else %}
+        <li>Vertical CDR of <b>{{ '%.2f' % v }}</b> is within the typical range.</li>
+        {% endif %}
+        {% if c.horizontal_cdr is not none and v - c.horizontal_cdr > 0.08 %}
+        <li>Cup is vertically elongated (vertical {{ '%.2f' % v }} vs horizontal {{ '%.2f' % c.horizontal_cdr }}), a pattern associated with glaucomatous change.</li>
+        {% endif %}
+      {% endif %}
+      {% set vf = r.visual_field %}
+      {% if vf and vf.mean_defect_db is not none %}
+        {% set md = vf.mean_defect_db %}
+        <li>Visual field mean defect of <b>{{ '%.1f' % md }} dB</b>
+          ({{ 'early' if md > -6 else ('moderate' if md >= -12 else 'advanced') }} functional loss range, Hodapp&ndash;Parrish&ndash;Anderson).
+          {% if v is not none %}Structure (vertical CDR {{ '%.2f' % v }}) and function are shown together for Phase 2 staging.{% endif %}</li>
+      {% endif %}
+      {% if k %}
+        <li>Image-based model estimates a glaucoma probability of <b>{{ '%.0f' % (k.glaucoma_probability * 100) }}%</b> ({{ k.risk_level|lower }} risk).</li>
+        {% if k.risk_level == 'High' or (v is not none and v >= cdr_flag) %}
+        <li>Recommend comprehensive glaucoma work-up: IOP, visual field testing and OCT of the RNFL.</li>
+        {% elif k.risk_level == 'Moderate' %}
+        <li>Recommend clinical review and comparison with previous examinations.</li>
+        {% else %}
+        <li>No structural indication for referral from this image; routine follow-up.</li>
+        {% endif %}
+      {% endif %}
+      </ol>
+      <p class="disclaimer">Automated findings are decision support only and must be confirmed by a qualified eye-care professional.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const v = document.getElementById('viewer'), cap = document.getElementById('viewcap');
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); v.src = b.dataset.src; v.alt = b.dataset.cap; cap.textContent = b.dataset.cap;
+  }));
+})();
+</script>
+{% endblock %}

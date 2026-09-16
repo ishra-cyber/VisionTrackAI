@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Worklist · VisionTrack AI{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>Worklist</h1>
+    <p class="sub">Fundus image analyses, most recent first</p>
+  </div>
+</div>
+
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Studies</span><span class="kpi-value">{{ stats.n or 0 }}</span></div>
+  <div class="kpi"><span class="kpi-label">Patients</span><span class="kpi-value">{{ stats.p or 0 }}</span></div>
+  <div class="kpi"><span class="kpi-label">High risk</span><span class="kpi-value">{{ stats.high or 0 }}</span></div>
+  <div class="kpi"><span class="kpi-label">Vertical CDR &ge; {{ cdr_flag }}</span><span class="kpi-value">{{ stats.cdr or 0 }}</span></div>
+</div>
+
+<div class="layout-2">
+  <section class="panel" id="new">
+    <div class="panel-head"><h2>New analysis</h2></div>
+    <form class="panel-body form" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" id="upform">
+      <label class="field">
+        <span>Patient ID</span>
+        <input name="patient_id" placeholder="e.g. P-0012" maxlength="40" autocomplete="off">
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Eye</span>
+          <select name="eye"><option value="OD">OD (right)</option><option value="OS">OS (left)</option></select>
+        </label>
+        <label class="field">
+          <span>Visit date</span>
+          <input type="date" name="visit_date" value="{{ today }}">
+        </label>
+      </div>
+      <div class="field">
+        <span>Fundus image</span>
+        <label class="dropzone" id="drop">
+          <input type="file" name="image" id="file" accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp" required>
+          <img id="preview" alt="" hidden>
+          <span class="dz-text" id="dztext"><b>Choose file</b> or drag it here<br><small>PNG, JPG, TIFF &middot; up to 20 MB</small></span>
+        </label>
+      </div>
+      <button type="submit" class="btn primary block" id="go" {{ 'disabled' if not model_ready }}>Run analysis</button>
+      <p class="hint">Pipeline: CLAHE enhancement &rarr; U-Net optic disc &amp; cup segmentation &rarr; CDR measurement &rarr; EfficientNet-B0 glaucoma risk.</p>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Recent studies</h2><a class="link" href="{{ url_for('history') }}">All patients &rarr;</a></div>
+    {% if recent %}
+    <div class="tablewrap">
+    <table class="grid">
+      <thead><tr>
+        <th>Study</th><th>Patient</th><th>Eye</th><th>Visit</th>
+        <th class="num">V-CDR</th><th class="num">Prob.</th><th>Risk</th>
+      </tr></thead>
+      <tbody>
+      {% for r in recent %}
+        <tr class="rowlink" onclick="location.href='{{ url_for('result', aid=r.id) }}'">
+          <td><a href="{{ url_for('result', aid=r.id) }}" class="mono">{{ r.id[:8] }}</a></td>
+          <td>{{ r.patient_id }}</td>
+          <td>{{ r.eye }}</td>
+          <td class="nowrap">{{ r.visit_date }}</td>
+          <td class="num {{ 'flag' if r.vcdr is not none and r.vcdr >= cdr_flag }}">{{ '%.2f' % r.vcdr if r.vcdr is not none else '—' }}</td>
+          <td class="num">{{ '%.0f%%' % (r.prob * 100) if r.prob is not none else '—' }}</td>
+          <td>{% if r.risk %}<span class="tag {{ r.risk|lower }}">{{ r.risk }}</span>{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <p><b>No studies yet</b></p>
+      <p>Upload a fundus photograph to create the first analysis.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+(function () {
+  const file = document.getElementById('file'), prev = document.getElementById('preview'),
+        txt = document.getElementById('dztext'), drop = document.getElementById('drop');
+  file.addEventListener('change', () => {
+    const f = file.files[0]; if (!f) return;
+    prev.src = URL.createObjectURL(f); prev.hidden = false;
+    txt.innerHTML = '<b>' + f.name.replace(/[<>&]/g, '') + '</b><br><small>' + (f.size / 1048576).toFixed(1) + ' MB &middot; click to change</small>';
+  });
+  ['dragover', 'dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', ev => { ev.preventDefault(); file.files = ev.dataTransfer.files; file.dispatchEvent(new Event('change')); });
+  document.getElementById('upform').addEventListener('submit', () => {
+    const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Analysing…';
+  });
+})();
+</script>
+{% endblock %}

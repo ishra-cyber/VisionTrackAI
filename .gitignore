@@ -1,0 +1,12 @@
+﻿.venv/
+__pycache__/
+data/smdg/
+data/papila/
+data/cache_*/
+data/splits_fast/
+checkpoints/*.pt
+app/visiontrack.db
+app/static/results/*
+!app/static/results/.gitkeep
+demo_images/
+*.mp4

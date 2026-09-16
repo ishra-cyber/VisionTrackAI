@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Patients · VisionTrack AI{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>{{ 'Patient ' ~ pid if pid else 'Patients' }}</h1>
+    <p class="sub">{{ 'Longitudinal record of optic nerve head measurements' if pid else 'Select a patient to view their study history' }}</p>
+  </div>
+</div>
+
+<section class="panel">
+  <form class="panel-body searchbar" method="get">
+    <label class="field grow">
+      <span>Patient ID</span>
+      <input name="patient_id" list="plist" value="{{ pid }}" placeholder="Search or select a patient" autocomplete="off">
+      <datalist id="plist">{% for p in patients %}<option value="{{ p }}">{% endfor %}</datalist>
+    </label>
+    <button type="submit" class="btn primary">Open record</button>
+  </form>
+  {% if not pid and patients %}
+  <div class="chips">
+    {% for p in patients %}<a class="chip" href="{{ url_for('history', patient_id=p) }}">{{ p }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if pid and not rows %}
+<div class="empty panel"><p><b>No studies found for “{{ pid }}”.</b></p><p>Check the ID or run a new analysis.</p></div>
+{% endif %}
+
+{% if rows %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Vertical CDR trend</h2>
+    <span class="legend">{% for eye in series %}<i class="ln {{ 'od' if eye == 'OD' else 'os' }}"></i>{{ eye }} {% endfor %}<i class="ln ref"></i>Reference 0.6</span>
+  </div>
+  <div class="panel-body">
+  {% set W, H, L, R, T, B = 1160, 300, 44, 16, 14, 30 %}
+  {% set dates = rows|map(attribute='visit_date')|unique|list %}
+  {% set nd = dates|length %}
+  <svg viewBox="0 0 {{ W }} {{ H }}" class="trend" role="img" aria-label="Vertical CDR by visit">
+    {% for g in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] %}
+      {% set y = T + (1 - g) * (H - T - B) %}
+      <line x1="{{ L }}" x2="{{ W - R }}" y1="{{ y }}" y2="{{ y }}" class="{{ 'refline' if g == 0.6 else 'gridline' }}"/>
+      <text x="{{ L - 8 }}" y="{{ y + 4 }}" text-anchor="end">{{ '%.1f' % g }}</text>
+    {% endfor %}
+    {% for d in dates %}
+      {% set x = L + 30 + loop.index0 * ((W - L - R - 60) / ([nd - 1, 1]|max)) %}
+      <text x="{{ x }}" y="{{ H - 8 }}" text-anchor="middle">{{ d }}</text>
+    {% endfor %}
+    {% for eye, pts in series.items() %}
+      {% set cls = 'od' if eye == 'OD' else 'os' %}
+      {% set ns = namespace(d='') %}
+      {% for p in pts %}
+        {% set x = L + 30 + dates.index(p.date) * ((W - L - R - 60) / ([nd - 1, 1]|max)) %}
+        {% set y = T + (1 - p.vcdr) * (H - T - B) %}
+        {% set ns.d = ns.d ~ (' L' if not loop.first else 'M') ~ x ~ ' ' ~ y %}
+      {% endfor %}
+      <path d="{{ ns.d }}" class="series {{ cls }}"/>
+      {% for p in pts %}
+        {% set x = L + 30 + dates.index(p.date) * ((W - L - R - 60) / ([nd - 1, 1]|max)) %}
+        {% set y = T + (1 - p.vcdr) * (H - T - B) %}
+        <circle cx="{{ x }}" cy="{{ y }}" r="4.5" class="pt {{ cls }}"><title>{{ eye }} · {{ p.date }} · {{ '%.3f' % p.vcdr }}</title></circle>
+      {% endfor %}
+    {% endfor %}
+  </svg>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Studies</h2><span class="muted small">{{ rows|length }} on record</span></div>
+  <div class="tablewrap">
+  <table class="grid">
+    <thead><tr>
+      <th>Visit</th><th>Eye</th><th class="num">V-CDR</th><th class="num">H-CDR</th><th class="num">Area CDR</th>
+      <th class="num">Glaucoma prob.</th><th>Risk</th><th>Study</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="rowlink" onclick="location.href='{{ url_for('result', aid=r.id) }}'">
+        <td class="nowrap">{{ r.visit_date }}</td><td>{{ r.eye }}</td>
+        <td class="num {{ 'flag' if r.vcdr is not none and r.vcdr >= 0.6 }}">{{ '%.3f' % r.vcdr if r.vcdr is not none else '—' }}</td>
+        <td class="num">{{ '%.3f' % r.hcdr if r.hcdr is not none else '—' }}</td>
+        <td class="num">{{ '%.3f' % r.acdr if r.acdr is not none else '—' }}</td>
+        <td class="num">{{ '%.1f%%' % (r.prob * 100) if r.prob is not none else '—' }}</td>
+        <td>{% if r.risk %}<span class="tag {{ r.risk|lower }}">{{ r.risk }}</span>{% endif %}</td>
+        <td><a class="mono" href="{{ url_for('result', aid=r.id) }}">{{ r.id[:8] }}</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="panel-note">Visual-field progression analysis will be added in Phase 2.</p>
+</section>
+{% endif %}
+{% endblock %}
