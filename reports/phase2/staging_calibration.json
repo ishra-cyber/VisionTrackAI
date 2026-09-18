@@ -1,0 +1,277 @@
+{
+  "fitted_on": "cohort_master.csv (164 eyes with a visual field, 505 with expert contours)",
+  "md_model": {
+    "intercept": 4.091172784631119,
+    "coefficients": [
+      -12.893957568066414,
+      -3.9187666662382297
+    ],
+    "predictors": [
+      "vcdr",
+      "glaucoma_probability"
+    ],
+    "residual_sd": 5.352613753470103,
+    "r2": 0.2795481405187977,
+    "n": 164,
+    "b_vcdr": -12.893957568066414,
+    "b_prob": -3.9187666662382297
+  },
+  "md_models": {
+    "cdr_only": {
+      "intercept": 4.205852029205278,
+      "coefficients": [
+        -18.309171533231215
+      ],
+      "predictors": [
+        "vcdr"
+      ],
+      "residual_sd": 5.469249694419917,
+      "r2": 0.24313609139855752,
+      "n": 164
+    },
+    "cdr_prob": {
+      "intercept": 4.091172784631119,
+      "coefficients": [
+        -12.893957568066414,
+        -3.9187666662382297
+      ],
+      "predictors": [
+        "vcdr",
+        "glaucoma_probability"
+      ],
+      "residual_sd": 5.352613753470103,
+      "r2": 0.2795481405187977,
+      "n": 164
+    },
+    "cdr_prob_rim": {
+      "intercept": -28.356478834565248,
+      "coefficients": [
+        9.619732509307923,
+        -4.147837062695617,
+        2.214098551933076,
+        -6.717474277605874,
+        32.65525207733625
+      ],
+      "predictors": [
+        "vcdr",
+        "glaucoma_probability",
+        "min_rim_ratio",
+        "rim_inferior",
+        "rim_to_disc_area"
+      ],
+      "residual_sd": 5.285424109096536,
+      "r2": 0.3106114770153814,
+      "n": 164
+    }
+  },
+  "md_model_ranked": [
+    "cdr_prob",
+    "cdr_prob_rim",
+    "cdr_only"
+  ],
+  "damage_models": {
+    "cdr_only": {
+      "intercept": -5.519522924547894,
+      "coefficients": [
+        8.23579109948345
+      ],
+      "predictors": [
+        "vcdr"
+      ],
+      "target": "MD < -6 dB (moderate or worse field loss)",
+      "n": 164,
+      "n_positive": 37,
+      "auc": 0.80006384337093,
+      "cv_auc": 0.7869759523302831
+    },
+    "cdr_prob": {
+      "intercept": -8.746199020457802,
+      "coefficients": [
+        3.7370446391104872,
+        6.648553686228216
+      ],
+      "predictors": [
+        "vcdr",
+        "glaucoma_probability"
+      ],
+      "target": "MD < -6 dB (moderate or worse field loss)",
+      "n": 164,
+      "n_positive": 37,
+      "auc": 0.8863587997446265,
+      "cv_auc": 0.872526069376463
+    },
+    "cdr_prob_rim": {
+      "intercept": -9.793095168255729,
+      "coefficients": [
+        4.450728319662802,
+        6.676505458164745,
+        -2.84138216487009,
+        2.4932542410417344,
+        0.6580267195942769
+      ],
+      "predictors": [
+        "vcdr",
+        "glaucoma_probability",
+        "min_rim_ratio",
+        "rim_inferior",
+        "rim_to_disc_area"
+      ],
+      "target": "MD < -6 dB (moderate or worse field loss)",
+      "n": 164,
+      "n_positive": 37,
+      "auc": 0.8874228559267929,
+      "cv_auc": 0.8572036603532667
+    }
+  },
+  "damage_model_ranked": [
+    "cdr_prob",
+    "cdr_prob_rim",
+    "cdr_only"
+  ],
+  "md_from_cdr": {
+    "slope": -18.309171533231215,
+    "intercept": 4.205852029205278,
+    "residual_sd": 5.469249694419917,
+    "r2": 0.24313609139855752,
+    "pearson_r": -0.49308832007923054,
+    "n": 164
+  },
+  "cdr_cutoffs": {
+    "normal_early": 0.58,
+    "early_moderate": 0.62,
+    "moderate_advanced": 0.65
+  },
+  "md_cutoffs": {
+    "normal_early": -2.0,
+    "early_moderate": -6.0,
+    "moderate_advanced": -12.0
+  },
+  "cdr_repeatability": {
+    "n_agreement": 505,
+    "sd_model_minus_expert": 0.07347042155874782,
+    "source": "held-out eyes only",
+    "sd_measurement": 0.052,
+    "critical_change": 0.144,
+    "definition": "95% critical change for the difference between two VisionTrack measurements of the same eye, propagated from the model-vs-expert SD"
+  },
+  "functional_damage_model": {
+    "intercept": -8.746199020457802,
+    "coefficients": [
+      3.7370446391104872,
+      6.648553686228216
+    ],
+    "predictors": [
+      "vcdr",
+      "glaucoma_probability"
+    ],
+    "target": "MD < -6 dB (moderate or worse field loss)",
+    "n": 164,
+    "n_positive": 37,
+    "auc": 0.8863587997446265,
+    "cv_auc": 0.872526069376463
+  },
+  "validation": {
+    "md_model_cv": {
+      "cdr_only": {
+        "mae_db": 4.035994039761416,
+        "rmse_db": 5.514603947719671,
+        "r2": 0.22103170435402952,
+        "stage_accuracy": 0.3048780487804878,
+        "n": 164
+      },
+      "cdr_prob": {
+        "mae_db": 3.9628044373744173,
+        "rmse_db": 5.405865976333246,
+        "r2": 0.25144851547484937,
+        "stage_accuracy": 0.3719512195121951,
+        "n": 164
+      },
+      "cdr_prob_rim": {
+        "mae_db": 3.826494167131774,
+        "rmse_db": 5.464533400629089,
+        "r2": 0.23511296969120132,
+        "stage_accuracy": 0.39634146341463417,
+        "n": 164
+      }
+    },
+    "selected_model": "cdr_prob",
+    "cutoff_detail": {
+      "normal_early": {
+        "cutoff": 0.6166,
+        "youden": 0.32852852852852865,
+        "sensitivity": 0.35555555555555557,
+        "specificity": 0.972972972972973,
+        "auc": 0.6405405405405405,
+        "n_positive": 90,
+        "chosen_cutoff": 0.58,
+        "sensitivity_at_chosen": 0.3888888888888889,
+        "specificity_at_chosen": 0.918918918918919
+      },
+      "early_moderate": {
+        "cutoff": 0.6166,
+        "youden": 0.5699084911683339,
+        "sensitivity": 0.6486486486486487,
+        "specificity": 0.9212598425196851,
+        "auc": 0.80006384337093,
+        "n_positive": 37,
+        "chosen_cutoff": 0.62,
+        "sensitivity_at_chosen": 0.6216216216216216,
+        "specificity_at_chosen": 0.9212598425196851
+      },
+      "moderate_advanced": {
+        "cutoff": 0.6332,
+        "youden": 0.6750380517503807,
+        "sensitivity": 0.7777777777777778,
+        "specificity": 0.8972602739726028,
+        "auc": 0.8647260273972602,
+        "n_positive": 18,
+        "chosen_cutoff": 0.65,
+        "sensitivity_at_chosen": 0.7222222222222222,
+        "specificity_at_chosen": 0.9178082191780822
+      }
+    },
+    "staging": {
+      "accuracy": 0.5182926829268293,
+      "within_one_stage": 0.8841463414634146,
+      "quadratic_kappa": 0.5904856420270833,
+      "confusion": [
+        [
+          68,
+          4,
+          1,
+          1
+        ],
+        [
+          43,
+          2,
+          4,
+          4
+        ],
+        [
+          9,
+          1,
+          2,
+          7
+        ],
+        [
+          3,
+          1,
+          1,
+          13
+        ]
+      ],
+      "n": 164,
+      "cv_accuracy": 0.4878048780487805,
+      "cv_within_one_stage": 0.8841463414634146,
+      "cv_quadratic_kappa": 0.5349345724145,
+      "stage_counts": [
+        74,
+        53,
+        19,
+        18
+      ],
+      "majority_baseline": 0.45121951219512196,
+      "balanced_accuracy": 0.4460350370231204
+    }
+  }
+}

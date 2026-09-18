@@ -28,6 +28,13 @@
 <div class="empty panel"><p><b>No studies found for “{{ pid }}”.</b></p><p>Check the ID or run a new analysis.</p></div>
 {% endif %}
 
+{% if prog and prog.summary %}
+<div class="notice {{ 'error' if prog.summary.status_code == 'progressing' else ('warn' if prog.summary.status_code == 'possible') }}">
+  <b>{{ prog.summary.status }}</b> ({{ prog.summary.eye }}) —
+  <a class="link" href="{{ url_for('progression_page', patient_id=pid) }}">open the full progression analysis &rarr;</a>
+</div>
+{% endif %}
+
 {% if rows %}
 <section class="panel">
   <div class="panel-head">
@@ -73,7 +80,7 @@
   <table class="grid">
     <thead><tr>
       <th>Visit</th><th>Eye</th><th class="num">V-CDR</th><th class="num">H-CDR</th><th class="num">Area CDR</th>
-      <th class="num">Glaucoma prob.</th><th>Risk</th><th>Study</th>
+      <th class="num">Field MD</th><th>Stage</th><th class="num">Glaucoma prob.</th><th>Risk</th><th>Study</th>
     </tr></thead>
     <tbody>
     {% for r in rows %}
@@ -82,6 +89,8 @@
         <td class="num {{ 'flag' if r.vcdr is not none and r.vcdr >= 0.6 }}">{{ '%.3f' % r.vcdr if r.vcdr is not none else '—' }}</td>
         <td class="num">{{ '%.3f' % r.hcdr if r.hcdr is not none else '—' }}</td>
         <td class="num">{{ '%.3f' % r.acdr if r.acdr is not none else '—' }}</td>
+        <td class="num">{{ '%+.2f dB' % r.md if r.md is not none else '—' }}</td>
+        <td>{% if r.stage_label %}<span class="tag st{{ r.stage }}">{{ r.stage_label }}</span>{% endif %}</td>
         <td class="num">{{ '%.1f%%' % (r.prob * 100) if r.prob is not none else '—' }}</td>
         <td>{% if r.risk %}<span class="tag {{ r.risk|lower }}">{{ r.risk }}</span>{% endif %}</td>
         <td><a class="mono" href="{{ url_for('result', aid=r.id) }}">{{ r.id[:8] }}</a></td>
@@ -90,7 +99,8 @@
     </tbody>
   </table>
   </div>
-  <p class="panel-note">Visual-field progression analysis will be added in Phase 2.</p>
+  <p class="panel-note"><a class="link" href="{{ url_for('progression_page', patient_id=pid) }}">Progression
+    analysis for this patient &rarr;</a></p>
 </section>
 {% endif %}
 {% endblock %}

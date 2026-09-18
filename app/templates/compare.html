@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Comparison · VisionTrack AI{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>{{ 'Comparison — ' ~ pid if pid else 'Comparison' }}</h1>
+    <p class="sub">Previous scan against the current scan, with the change in each measurement</p>
+  </div>
+  {% if cur %}<div class="actions noprint"><button class="btn" onclick="window.print()">Print</button>
+    <a class="btn" href="{{ url_for('progression_page', patient_id=pid) }}">Progression</a></div>{% endif %}
+</div>
+
+<section class="panel">
+  <form class="panel-body searchbar" method="get">
+    <label class="field grow"><span>Patient ID</span>
+      <input name="patient_id" list="plist" value="{{ pid }}" placeholder="Patient with two or more studies" autocomplete="off">
+      <datalist id="plist">{% for p in patients %}<option value="{{ p }}">{% endfor %}</datalist>
+    </label>
+    <label class="field"><span>Eye</span>
+      <select name="eye"><option value="">Both</option>
+        <option value="OD" {{ 'selected' if eye == 'OD' }}>OD</option>
+        <option value="OS" {{ 'selected' if eye == 'OS' }}>OS</option></select>
+    </label>
+    <button type="submit" class="btn primary">Compare</button>
+  </form>
+  {% if not pid and patients %}
+  <div class="chips">{% for p in patients %}<a class="chip" href="{{ url_for('compare', patient_id=p) }}">{{ p }}</a>{% endfor %}</div>
+  {% endif %}
+</section>
+
+{% if pid and not cur %}
+<div class="empty panel"><p><b>No studies for “{{ pid }}”.</b></p></div>
+{% elif cur and not prev %}
+<div class="notice warn">Only one study on record for this patient{{ ' (' ~ eye ~ ')' if eye }} — nothing to compare against yet.</div>
+{% endif %}
+
+{% if prev and cur %}
+<div class="layout-2 even">
+  {% for s in [prev, cur] %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>{{ 'Previous' if loop.first else 'Current' }} — {{ s.visit_date }}</h2>
+      <span class="muted small">{{ s.eye }} · <a class="mono" href="{{ url_for('result', aid=s.id) }}">{{ s.id[:8] }}</a></span>
+    </div>
+    <div class="viewer">
+      <img src="{{ url_for('static', filename='results/' ~ s.id ~ '/overlay.png') }}" alt="Segmentation overlay {{ s.visit_date }}">
+    </div>
+    <table class="kv">
+      <tr><th>Vertical CDR</th><td class="{{ 'flag' if s.vcdr is not none and s.vcdr >= cdr_flag }}"><b>{{ '%.3f' % s.vcdr if s.vcdr is not none else '—' }}</b></td></tr>
+      <tr><th>Visual-field MD</th><td>{{ '%+.2f dB' % s.md if s.md is not none else '—' }}</td></tr>
+      <tr><th>Stage</th><td>{% if s.stage_label %}<span class="tag st{{ s.stage }}">{{ s.stage_label }}</span>{% else %}—{% endif %}</td></tr>
+      <tr><th>Glaucoma probability</th><td>{{ '%.1f%%' % (s.prob * 100) if s.prob is not none else '—' }}</td></tr>
+    </table>
+  </section>
+  {% endfor %}
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Change since the previous scan</h2>
+    <span class="muted small">{{ prev.visit_date }} &rarr; {{ cur.visit_date }}</span></div>
+  <div class="panel-body">
+    <div class="kpis">
+      <div class="kpi"><span class="kpi-label">Change in CDR</span>
+        <span class="kpi-value {{ 'worse' if delta.vcdr is not none and delta.vcdr > 0 }}">
+          {{ '%+.3f' % delta.vcdr if delta.vcdr is not none else '—' }}</span></div>
+      <div class="kpi"><span class="kpi-label">Change in MD</span>
+        <span class="kpi-value {{ 'worse' if delta.md is not none and delta.md < 0 }}">
+          {{ '%+.2f dB' % delta.md if delta.md is not none else '—' }}</span></div>
+      <div class="kpi"><span class="kpi-label">Change in stage</span>
+        <span class="kpi-value {{ 'worse' if delta.stage and delta.stage > 0 }}">
+          {{ '%+d' % delta.stage if delta.stage is not none else '—' }}</span></div>
+      <div class="kpi"><span class="kpi-label">Damage detected</span>
+        <span class="kpi-value">{{ 'YES' if (delta.vcdr is not none and delta.vcdr >= crit) or (delta.md is not none and delta.md <= -2) else 'No' }}</span></div>
+    </div>
+    <ul class="findings tight">
+      {% if delta.vcdr is not none %}
+      <li>Cup-to-disc ratio moved {{ '%+.3f' % delta.vcdr }}, which is
+        {{ 'larger than' if delta.vcdr|abs >= crit else 'within' }} the {{ '%.3f' % crit }} measurement-error
+        limit measured on our own cohort{{ ' — a real change' if delta.vcdr|abs >= crit else ', so it cannot be distinguished from noise' }}.</li>
+      {% endif %}
+      {% if delta.md is not none %}
+      <li>Visual-field Mean Defect moved {{ '%+.2f' % delta.md }} dB
+        ({{ 'beyond' if delta.md|abs >= 2 else 'within' }} the 2 dB test–retest limit).</li>
+      {% endif %}
+      {% if delta.min_rim_ratio is not none %}
+      <li>Thinnest neuroretinal rim moved {{ '%+.3f' % delta.min_rim_ratio }} of the disc radius.</li>
+      {% endif %}
+    </ul>
+    <p class="panel-note">Two scans can show a change; they cannot establish a trend. Use the
+      <a class="link" href="{{ url_for('progression_page', patient_id=pid) }}">Progression</a> page for that.</p>
+  </div>
+</section>
+{% endif %}
+
+{% if rows|length > 1 %}
+<section class="panel">
+  <div class="panel-head"><h2>Scan history</h2><span class="muted small">{{ rows|length }} studies</span></div>
+  <div class="panel-body scanstrip">
+    {% for s in rows %}
+    <a class="scan {{ 'on' if cur and s.id == cur.id }}" href="{{ url_for('result', aid=s.id) }}">
+      <img src="{{ url_for('static', filename='results/' ~ s.id ~ '/roi.png') }}" alt="">
+      <span>{{ s.visit_date }}</span>
+      <small>CDR {{ '%.2f' % s.vcdr if s.vcdr is not none else '—' }}</small>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

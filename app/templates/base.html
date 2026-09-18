@@ -21,6 +21,8 @@
       {% set ep = request.endpoint %}
       <a href="{{ url_for('index') }}" class="{{ 'active' if ep in ('index', 'analyze', 'result') }}">Worklist</a>
       <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}">Patients</a>
+      <a href="{{ url_for('compare') }}" class="{{ 'active' if ep == 'compare' }}">Comparison</a>
+      <a href="{{ url_for('progression_page') }}" class="{{ 'active' if ep == 'progression_page' }}">Progression</a>
       <a href="{{ url_for('visual_field') }}" class="{{ 'active' if ep == 'visual_field' }}">Visual Field</a>
     </nav>
     <div class="sysstatus" title="Model status">
@@ -33,7 +35,7 @@
   {% block content %}{% endblock %}
 </main>
 <footer class="pagefoot">
-  <span>VisionTrack AI &middot; Phase 1 &middot; U-Net disc/cup segmentation &middot; EfficientNet-B0 risk model</span>
+  <span>VisionTrack AI &middot; U-Net disc/cup segmentation &middot; EfficientNet-B0 risk &middot; CDR + visual-field staging &middot; progression monitoring</span>
   <span>For research and screening support only. Not a substitute for clinical examination.</span>
 </footer>
 </body>

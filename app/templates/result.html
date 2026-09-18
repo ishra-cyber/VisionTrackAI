@@ -33,6 +33,13 @@
     <div><dt>Source image</dt><dd class="trunc" title="{{ row.filename }}">{{ row.filename }}</dd></div>
     <div><dt>Resolution</dt><dd>{{ r.image_size[0] }} &times; {{ r.image_size[1] }} px</dd></div>
     <div><dt>Studies on record</dt><dd><a href="{{ url_for('history', patient_id=r.patient_id) }}">{{ visits }}</a></dd></div>
+    {% if delta %}
+    <div><dt>Change since {{ delta.from_date }}</dt><dd>
+      {% if delta.vcdr is not none %}CDR <b class="{{ 'flag' if delta.vcdr > 0 }}">{{ '%+.3f' % delta.vcdr }}</b>{% endif %}
+      {% if delta.md is not none %} · MD <b class="{{ 'flag' if delta.md < 0 }}">{{ '%+.2f' % delta.md }} dB</b>{% endif %}
+      <a class="link noprint" href="{{ url_for('compare', patient_id=r.patient_id, eye=r.eye) }}">compare &rarr;</a>
+    </dd></div>
+    {% endif %}
   </dl>
 </section>
 
@@ -97,6 +104,108 @@
   </div>
 </div>
 
+
+
+{% set rim = r.component1.rim %}
+{% if rim %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Neuroretinal rim</h2>
+    <span class="muted small">Rim width by sector, as a fraction of the disc radius</span>
+  </div>
+  <div class="panel-body">
+    {% set sr = rim.sector_rim_ratio %}
+    <div class="rimgrid">
+      {% for name in ['inferior', 'superior', 'nasal', 'temporal'] %}
+      <div class="rimcell {{ 'thin' if sr[name] is not none and rim.min_rim_sector == name }}">
+        <span>{{ name }}</span><b>{{ '%.2f' % sr[name] if sr[name] is not none else '—' }}</b>
+      </div>
+      {% endfor %}
+    </div>
+    <table class="kv">
+      <tr><th>ISNT rule</th><td>
+        <span class="isnt {{ 'ok' if rim.isnt_respected else 'no' }}">
+          {{ 'Respected' if rim.isnt_respected else 'Not respected' }}</span>
+        {% if not rim.isnt_respected %}<span class="muted small"> — {{ rim.isnt_breaches|join('; ') }}</span>{% endif %}
+      </td></tr>
+      <tr><th>Thinnest rim</th><td><b>{{ '%.2f' % rim.min_rim_to_disc_ratio if rim.min_rim_to_disc_ratio is not none else '—' }}</b>
+        of disc radius <span class="muted small">({{ rim.min_rim_sector or 'unclassified' }} sector,
+        {{ '%.0f' % rim.min_rim_angle_deg }}°)</span></td></tr>
+      <tr><th>Rim / disc area</th><td>{{ '%.2f' % rim.rim_to_disc_area_ratio if rim.rim_to_disc_area_ratio is not none else '—' }}</td></tr>
+    </table>
+    {% if r.component1.rim_findings %}
+    <ol class="findings tight">{% for f in r.component1.rim_findings %}<li>{{ f }}</li>{% endfor %}</ol>
+    {% endif %}
+    <p class="hint">{{ rim.note }}</p>
+  </div>
+</section>
+{% endif %}
+
+{% if stage and stage.available %}
+{% set st = stage %}
+<section class="panel stagepanel">
+  <div class="panel-head">
+    <h2>Glaucoma stage &mdash; structure and visual field</h2>
+    <span class="muted small">Component 2 &middot; {{ st.basis }}</span>
+  </div>
+  <div class="panel-body">
+    <div class="stagehead">
+      <span class="stagebadge s{{ st.stage }}">Stage {{ st.stage }}</span>
+      <span class="stagename">{{ st.stage_label }}</span>
+      <span class="stagemeta">Suggested review in <b>{{ st.follow_up_months }} months</b></span>
+    </div>
+    <div class="stageladder" aria-hidden="true">
+      {% for i in range(4) %}<span class="rung s{{ i }} {{ 'on' if i == st.stage }}">{{ stage_names[i] }}</span>{% endfor %}
+    </div>
+
+    <div class="layout-2 even stagecols">
+      <div>
+        <h3 class="minih">Structure &mdash; optic nerve head</h3>
+        {% if st.structural %}
+        <table class="kv">
+          <tr><th>Vertical CDR</th><td><b>{{ '%.3f' % st.structural.vcdr }}</b></td></tr>
+          <tr><th>Structural grade</th><td><span class="tag st{{ st.structural.code }}">{{ st.structural.label }}</span></td></tr>
+          <tr><th>Fitted cut-points</th><td class="mono small">{{ '%.2f' % st.structural.cutoffs.normal_early }} /
+            {{ '%.2f' % st.structural.cutoffs.early_moderate }} / {{ '%.2f' % st.structural.cutoffs.moderate_advanced }}</td></tr>
+        </table>
+        {% else %}<p class="muted">Optic disc not measurable on this image.</p>{% endif %}
+      </div>
+      <div>
+        <h3 class="minih">Function &mdash; visual field</h3>
+        {% if st.functional %}
+        <table class="kv">
+          <tr><th>Mean Defect</th><td><b>{{ '%+.2f' % st.functional.md }} dB</b> <span class="muted small">measured</span></td></tr>
+          <tr><th>Field stage</th><td><span class="tag st{{ st.functional.code }}">{{ st.functional.label }}</span></td></tr>
+          <tr><th>Criteria</th><td class="muted small">{{ st.functional.criteria }}</td></tr>
+        </table>
+        {% elif st.estimated_functional %}
+        {% set ef = st.estimated_functional %}
+        <table class="kv">
+          <tr><th>Mean Defect <span class="muted small">estimated</span></th>
+            <td><b>{{ '%+.1f' % ef.md_estimate }} dB</b>
+              <span class="muted small">95% interval {{ '%+.1f' % ef.ci_low }} to {{ '%+.1f' % ef.ci_high }}</span></td></tr>
+          {% if st.damage_probability %}
+          <tr><th>Moderate or worse field loss</th>
+            <td><b>{{ '%.0f' % st.damage_probability.percent }}%</b>
+              <span class="muted small">AUC {{ '%.2f' % st.damage_probability.auc }} on the validation cohort</span></td></tr>
+          {% endif %}
+          <tr><th>Basis</th><td class="muted small">{{ ef.predictors }} &middot; no perimetry on file</td></tr>
+        </table>
+        <p class="hint">Estimated from the fundus image. Perimetry is still required to confirm functional loss.</p>
+        {% else %}<p class="muted">No visual-field information available.</p>{% endif %}
+      </div>
+    </div>
+
+    {% if st.concordance %}
+    <div class="notice {{ 'warn' if not st.concordance.agree }}">{{ st.concordance.label }}</div>
+    {% endif %}
+    <ul class="findings tight">{% for e in st.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+    <p class="strong">{{ st.recommendation }}</p>
+    <p class="noprint"><a class="link" href="{{ url_for('progression_page', patient_id=r.patient_id) }}">Open progression analysis for {{ r.patient_id }} &rarr;</a></p>
+  </div>
+</section>
+{% endif %}
+
 <div class="layout-2 even">
   <section class="panel">
     <div class="panel-head"><h2>Measurements</h2><span class="muted small">U-Net segmentation</span></div>
@@ -117,6 +226,19 @@
           <td class="num strong">{{ '%.2f' % r.visual_field.mean_defect_db }} dB</td><td class="muted">&gt; &minus;2 dB</td></tr>
         {% endif %}
         <tr><td>Disc / cup area</td><td class="num">{{ '{:,}'.format(c.disc_area) }} / {{ '{:,}'.format(c.cup_area) }} px²</td><td></td></tr>
+        {% set ph = r.component1.physical %}
+        {% if ph %}
+        <tr class="{{ 'rowflag' if not ph.plausible }}">
+          <td>Disc area <span class="muted small">({{ 'assumed' if ph.assumed_axial_length else 'measured' }} axial length)</span></td>
+          <td class="num strong">{{ '%.2f' % ph.disc_area_mm2 }} mm²</td><td class="muted">2.1–2.8</td></tr>
+        <tr><td>Rim area</td><td class="num">{{ '%.2f' % ph.rim_area_mm2 }} mm²</td><td class="muted">&gt; 1.2</td></tr>
+        <tr><td>Disc diameter</td><td class="num">{{ '%.2f' % ph.disc_diameter_mm }} mm</td><td class="muted">1.5–2.2</td></tr>
+        {% if not ph.plausible %}
+        <tr><td colspan="3" class="muted small">Physical sizes fall outside the usual range — the camera
+          field-of-view assumption ({{ '%g' % ph.fov_degrees }}°) probably does not match this image.
+          The pixel measurements above are unaffected.</td></tr>
+        {% endif %}
+        {% endif %}
       </tbody>
     </table>
     {% if v is not none %}
@@ -169,6 +291,21 @@
     </div>
   </section>
 </div>
+
+{% if series and series|length > 1 %}
+<section class="panel noprint">
+  <div class="panel-head"><h2>Scan history</h2>
+    <span class="muted small">{{ series|length }} studies for {{ r.patient_id }} ({{ r.eye }})</span></div>
+  <div class="panel-body scanstrip">
+    {% for s in series %}
+    <a class="scan {{ 'on' if s.id == aid }}" href="{{ url_for('result', aid=s.id) }}">
+      <img src="{{ url_for('static', filename='results/' ~ s.id ~ '/roi.png') }}" alt="">
+      <span>{{ s.visit_date }}</span><small>CDR {{ '%.2f' % s.vcdr if s.vcdr is not none else '—' }}</small>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <script>
 (function () {

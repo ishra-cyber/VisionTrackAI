@@ -1,0 +1,167 @@
+{
+  "operating_points": {
+    "3 visits / 2 y": [
+      {
+        "rate": 0.0,
+        "progressing": 0.003,
+        "progressing_or_possible": 0.04675
+      },
+      {
+        "rate": 0.01,
+        "progressing": 0.0055,
+        "progressing_or_possible": 0.074
+      },
+      {
+        "rate": 0.02,
+        "progressing": 0.0125,
+        "progressing_or_possible": 0.10475
+      },
+      {
+        "rate": 0.03,
+        "progressing": 0.0215,
+        "progressing_or_possible": 0.16875
+      },
+      {
+        "rate": 0.05,
+        "progressing": 0.04275,
+        "progressing_or_possible": 0.322
+      },
+      {
+        "rate": 0.08,
+        "progressing": 0.10975,
+        "progressing_or_possible": 0.61125
+      },
+      {
+        "rate": 0.1,
+        "progressing": 0.1375,
+        "progressing_or_possible": 0.79025
+      }
+    ],
+    "4 visits / 3 y": [
+      {
+        "rate": 0.0,
+        "progressing": 0.00325,
+        "progressing_or_possible": 0.0435
+      },
+      {
+        "rate": 0.01,
+        "progressing": 0.016,
+        "progressing_or_possible": 0.092
+      },
+      {
+        "rate": 0.02,
+        "progressing": 0.037,
+        "progressing_or_possible": 0.1685
+      },
+      {
+        "rate": 0.03,
+        "progressing": 0.06875,
+        "progressing_or_possible": 0.28275
+      },
+      {
+        "rate": 0.05,
+        "progressing": 0.188,
+        "progressing_or_possible": 0.5775
+      },
+      {
+        "rate": 0.08,
+        "progressing": 0.45,
+        "progressing_or_possible": 0.91325
+      },
+      {
+        "rate": 0.1,
+        "progressing": 0.6095,
+        "progressing_or_possible": 0.9855
+      }
+    ],
+    "5 visits / 4 y": [
+      {
+        "rate": 0.0,
+        "progressing": 0.006,
+        "progressing_or_possible": 0.04275
+      },
+      {
+        "rate": 0.01,
+        "progressing": 0.01825,
+        "progressing_or_possible": 0.1115
+      },
+      {
+        "rate": 0.02,
+        "progressing": 0.0745,
+        "progressing_or_possible": 0.254
+      },
+      {
+        "rate": 0.03,
+        "progressing": 0.17275,
+        "progressing_or_possible": 0.45775
+      },
+      {
+        "rate": 0.05,
+        "progressing": 0.492,
+        "progressing_or_possible": 0.8255
+      },
+      {
+        "rate": 0.08,
+        "progressing": 0.882,
+        "progressing_or_possible": 0.99125
+      },
+      {
+        "rate": 0.1,
+        "progressing": 0.97125,
+        "progressing_or_possible": 0.9995
+      }
+    ],
+    "6 visits / 5 y": [
+      {
+        "rate": 0.0,
+        "progressing": 0.0045,
+        "progressing_or_possible": 0.0475
+      },
+      {
+        "rate": 0.01,
+        "progressing": 0.0375,
+        "progressing_or_possible": 0.15625
+      },
+      {
+        "rate": 0.02,
+        "progressing": 0.1475,
+        "progressing_or_possible": 0.377
+      },
+      {
+        "rate": 0.03,
+        "progressing": 0.3455,
+        "progressing_or_possible": 0.63625
+      },
+      {
+        "rate": 0.05,
+        "progressing": 0.8135,
+        "progressing_or_possible": 0.9485
+      },
+      {
+        "rate": 0.08,
+        "progressing": 0.9955,
+        "progressing_or_possible": 0.99925
+      },
+      {
+        "rate": 0.1,
+        "progressing": 1.0,
+        "progressing_or_possible": 1.0
+      }
+    ]
+  },
+  "measurement_sd": 0.052,
+  "critical_change": 0.144,
+  "trials_per_cell": 4000,
+  "false_positive_rate": {
+    "3 visits / 2 y": 0.003,
+    "4 visits / 3 y": 0.00325,
+    "5 visits / 4 y": 0.006,
+    "6 visits / 5 y": 0.0045
+  },
+  "detectable_rate_80": {
+    "3 visits / 2 y": null,
+    "4 visits / 3 y": null,
+    "5 visits / 4 y": 0.08,
+    "6 visits / 5 y": 0.05
+  }
+}

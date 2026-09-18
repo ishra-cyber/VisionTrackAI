@@ -247,3 +247,47 @@ td.flag{color:var(--bad);font-weight:600}
 .figgrid img{width:100%;border:1px solid var(--line);border-radius:4px;background:#fff;display:block}
 @media (max-width:860px){.valgrid{grid-template-columns:1fr}}
 @media (min-width:1000px){.figgrid .wide{grid-column:span 2}}
+
+/* ---------- Phase 2: staging + progression ---------- */
+.stagepanel .stagehead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.stagebadge{font-weight:700;font-size:15px;letter-spacing:.02em;color:#fff;border-radius:8px;padding:7px 12px;background:#6b7c8f}
+.stagebadge.s0{background:#2e7d5b}.stagebadge.s1{background:#0b4f8a}
+.stagebadge.s2{background:#e08a1e}.stagebadge.s3{background:#b3261e}
+.stagename{font-size:20px;font-weight:650}
+.stagemeta{margin-left:auto;color:#55677a;font-size:13px}
+.stageladder{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:2px 0 16px}
+.stageladder .rung{font-size:11.5px;text-align:center;padding:6px 4px;border-radius:6px;background:#eef2f6;color:#8a99a8;border:1px solid #e2e8ee}
+.stageladder .rung.on{color:#fff;border-color:transparent;font-weight:650}
+.stageladder .rung.s0.on{background:#2e7d5b}.stageladder .rung.s1.on{background:#0b4f8a}
+.stageladder .rung.s2.on{background:#e08a1e}.stageladder .rung.s3.on{background:#b3261e}
+.stagecols{gap:26px;margin-top:4px}
+.minih{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#55677a;margin:14px 0 8px}
+.tag.st0{background:#e6f2ec;color:#1f5f45}.tag.st1{background:#e6eff7;color:#0b4f8a}
+.tag.st2{background:#fdf0dd;color:#8a5406}.tag.st3{background:#fbe6e4;color:#8c1d16}
+.tag.prog-stable,.tag.prog-improving{background:#e6f2ec;color:#1f5f45}
+.tag.prog-possible{background:#fdf0dd;color:#8a5406}
+.tag.prog-progressing{background:#fbe6e4;color:#8c1d16}
+.tag.prog-insufficient{background:#eef2f6;color:#55677a}
+.findings.tight li{margin:3px 0}
+.noiseband{fill:#0b4f8a;opacity:.07}
+.ln.fit{background:#6b7c8f}
+.sw.noise{background:#0b4f8a;opacity:.25}
+@media (max-width:720px){.stagecols{display:block}.stagemeta{margin-left:0}}
+
+/* ---------- rim, physical units, comparison ---------- */
+.scanstrip{display:flex;gap:12px;overflow-x:auto;padding:4px 0}
+.scanstrip .scan{flex:0 0 118px;text-align:center;text-decoration:none;color:inherit;border:1px solid #e2e8ee;
+  border-radius:9px;padding:7px;background:#fff}
+.scanstrip .scan.on{border-color:#0b4f8a;box-shadow:0 0 0 2px rgba(11,79,138,.14)}
+.scanstrip .scan img{width:100%;height:78px;object-fit:cover;border-radius:6px;background:#0d1b26}
+.scanstrip .scan span{display:block;font-size:11.5px;margin-top:5px;font-weight:600}
+.scanstrip .scan small{display:block;font-size:11px;color:#55677a}
+.kpi-value.worse{color:#b3261e}
+.rimgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 12px}
+.rimcell{border:1px solid #e2e8ee;border-radius:8px;padding:9px;text-align:center;background:#fafcfe}
+.rimcell b{display:block;font-size:17px;margin-top:3px}
+.rimcell.thin{border-color:#e8b4ae;background:#fdf6f5}
+.rimcell span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#55677a}
+.isnt{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.isnt.ok{background:#e6f2ec;color:#1f5f45}.isnt.no{background:#fdf0dd;color:#8a5406}
+@media (max-width:640px){.rimgrid{grid-template-columns:repeat(2,1fr)}}

@@ -1,4 +1,4 @@
-"""VisionTrack AI - Flask web application (Phase 1).
+"""VisionTrack AI - Flask web application (Phase 1 + Phase 2).
 
     python app/app.py            -> http://127.0.0.1:5000
 """
@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT))
 import config  # noqa: E402
 from src.visualize import crop_roi, make_overlay  # noqa: E402
 from src.preprocessing import decode_rgb  # noqa: E402
+from src import progression  # noqa: E402
+from src.staging import STAGE_NAMES, build_features, combined_stage, load_calibration  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent
 RESULTS = APP_DIR / "static" / "results"
@@ -54,6 +56,16 @@ def create_app(pipeline=None):
                 filename TEXT, vcdr REAL, hcdr REAL, acdr REAL, prob REAL,
                 prediction TEXT, risk TEXT, result_json TEXT,
                 created TEXT DEFAULT CURRENT_TIMESTAMP)""")
+            # Phase 2 columns, added in place so existing databases keep working
+            have = {r[1] for r in g.db.execute("PRAGMA table_info(analyses)")}
+            for col, decl in (("md", "REAL"), ("stage", "INTEGER"), ("stage_label", "TEXT"),
+                              ("md_source", "TEXT"), ("damage_prob", "REAL"),
+                              ("age", "REAL"), ("iop", "REAL"), ("axial_length", "REAL"),
+                              ("min_rim_ratio", "REAL"), ("isnt_ok", "INTEGER"),
+                              ("disc_area_mm2", "REAL")):
+                if col not in have:
+                    g.db.execute(f"ALTER TABLE analyses ADD COLUMN {col} {decl}")
+            g.db.commit()
         return g.db
 
     @app.teardown_appcontext
@@ -63,7 +75,8 @@ def create_app(pipeline=None):
             conn.close()
 
     # ------------------------------------------------------------ core
-    def run_analysis(file_storage, patient_id, eye, visit_date, extra=None):
+    def run_analysis(file_storage, patient_id, eye, visit_date, md=None, age=None, iop=None,
+                     axial_length=None, extra=None):
         name = file_storage.filename or "upload.png"
         if Path(name).suffix.lower() not in ALLOWED:
             raise ValueError("Unsupported file type. Upload a PNG / JPG / TIFF fundus image.")
@@ -72,10 +85,28 @@ def create_app(pipeline=None):
         if pipe is None:
             raise RuntimeError(state["error"])
         aid = uuid.uuid4().hex[:12]
-        result, disc, cup = pipe.analyze(rgb, image_id=Path(name).stem)
+        result, disc, cup = pipe.analyze(rgb, image_id=Path(name).stem, eye=eye,
+                                         axial_length_mm=axial_length)
         result.update({"analysis_id": aid, "patient_id": patient_id, "eye": eye, "visit_date": visit_date})
         if extra:
             result.update(extra)
+
+        # ---- Component 2: CDR + visual-field staging -------------------
+        if md is None:
+            md = ((result.get("visual_field") or {}).get("mean_defect_db"))
+        md_source = "measured" if md is not None else "estimated"
+        cdr_v = result["component1"]["cdr"]["vertical_cdr"]
+        prob_v = (result.get("classification") or {}).get("glaucoma_probability")
+        rim_v = result["component1"].get("rim")
+        feats = build_features(cdr_v, prob_v, rim_v, age, iop)
+        result["clinical"] = {"age": age, "iop": iop, "axial_length_mm": axial_length}
+        stage = combined_stage(cdr_v, md, prob_v, feats)
+        result["component2"] = stage
+        result["schema_version"] = "2.0"
+        if md is not None:
+            result.setdefault("visual_field", {}).update({"mean_defect_db": float(md),
+                                                          "source": (result.get("visual_field") or {}).get("source",
+                                                                                                           "entered")})
 
         # save images (cap long side to 1024 px for the browser)
         scale = min(1.0, 1024 / max(rgb.shape[:2]))
@@ -98,11 +129,18 @@ def create_app(pipeline=None):
         (d / "result.json").write_text(json.dumps(result, indent=2))
 
         c, k = result["component1"]["cdr"], result["classification"] or {}
+        dmg = (stage.get("damage_probability") or {}).get("probability") if stage.get("available") else None
         db().execute("INSERT INTO analyses (id, patient_id, eye, visit_date, filename, vcdr, hcdr, acdr, prob, "
-                     "prediction, risk, result_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                     "prediction, risk, result_json, md, stage, stage_label, md_source, damage_prob, "
+                     "age, iop, axial_length, min_rim_ratio, isnt_ok, disc_area_mm2) "
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                      (aid, patient_id, eye, visit_date, name, c["vertical_cdr"], c["horizontal_cdr"],
                       c["area_cdr"], k.get("glaucoma_probability"), k.get("prediction"), k.get("risk_level"),
-                      json.dumps(result)))
+                      json.dumps(result), md, stage.get("stage"), stage.get("stage_label"),
+                      md_source if md is not None else None, dmg, age, iop, axial_length,
+                      (rim_v or {}).get("min_rim_to_disc_ratio"),
+                      None if not rim_v else int(bool(rim_v.get("isnt_respected"))),
+                      ((result["component1"].get("physical") or {}).get("disc_area_mm2"))))
         db().commit()
         return result
 
@@ -110,7 +148,16 @@ def create_app(pipeline=None):
         pid = (request.form.get("patient_id") or "").strip()[:40] or "anonymous"
         eye = request.form.get("eye", "OD") if request.form.get("eye") in ("OD", "OS") else "OD"
         vd = (request.form.get("visit_date") or date.today().isoformat())[:10]
-        return pid, eye, vd
+        def num(field, lo, hi):
+            raw = (request.form.get(field) or "").strip()
+            try:
+                v = float(raw) if raw else None
+            except ValueError:
+                return None
+            return v if v is None or lo <= v <= hi else None
+
+        return pid, eye, vd, num("mean_defect", -40, 10), num("age", 0, 120), \
+            num("iop", 0, 80), num("axial_length", 15, 40)
 
     # ------------------------------------------------------------ routes
     @app.context_processor
@@ -151,9 +198,18 @@ def create_app(pipeline=None):
         if row is None:
             abort(404)
         r = json.loads(row["result_json"])
-        visits = db().execute("SELECT COUNT(*) FROM analyses WHERE patient_id=?", (row["patient_id"],)).fetchone()[0]
-        return render_template("result.html", r=r, aid=aid, row=row, visits=visits,
-                               cdr_flag=config.CDR_SUSPICIOUS, bands=config.RISK_BANDS)
+        series = db().execute("SELECT * FROM analyses WHERE patient_id=? AND eye=? "
+                              "ORDER BY visit_date, created", (row["patient_id"], row["eye"])).fetchall()
+        visits = db().execute("SELECT COUNT(*) FROM analyses WHERE patient_id=?",
+                              (row["patient_id"],)).fetchone()[0]
+        prev = None
+        for i, s_ in enumerate(series):
+            if s_["id"] == aid and i > 0:
+                prev = series[i - 1]
+        return render_template("result.html", r=r, aid=aid, row=row, visits=visits, series=series,
+                               prev=prev, delta=_delta(prev, row), stage=r.get("component2"),
+                               stage_names=STAGE_NAMES, cdr_flag=config.CDR_SUSPICIOUS,
+                               bands=config.RISK_BANDS)
 
     @app.get("/result/<aid>/json")
     def result_json(aid):
@@ -175,7 +231,90 @@ def create_app(pipeline=None):
         for r in rows:
             if r["vcdr"] is not None:
                 series.setdefault(r["eye"], []).append({"date": r["visit_date"], "vcdr": r["vcdr"]})
-        return render_template("history.html", pid=pid, patients=patients, rows=rows, series=series)
+        prog = None
+        if rows:
+            progression.refresh_thresholds()
+            prog = progression.analyze_patient(
+                [{"date": r["visit_date"], "eye": r["eye"], "vcdr": r["vcdr"],
+                  "md": r["md"] if "md" in r.keys() else None} for r in rows])
+        return render_template("history.html", pid=pid, patients=patients, rows=rows, series=series, prog=prog)
+
+    def _delta(prev, cur):
+        """Change since the previous study of the same eye."""
+        if prev is None or cur is None:
+            return None
+        def d(field):
+            a, b = prev[field], cur[field]
+            return None if a is None or b is None else round(b - a, 4)
+        return {"vcdr": d("vcdr"), "md": d("md"), "prob": d("prob"),
+                "min_rim_ratio": d("min_rim_ratio") if "min_rim_ratio" in cur.keys() else None,
+                "stage": (None if prev["stage"] is None or cur["stage"] is None
+                          else cur["stage"] - prev["stage"]),
+                "days": None, "from_date": prev["visit_date"], "from_id": prev["id"]}
+
+    # ------------------------------------------------------------ comparison (slide 05)
+    @app.get("/compare")
+    def compare():
+        progression.refresh_thresholds()
+        pid = request.args.get("patient_id", "").strip()
+        conn = db()
+        patients = [r["patient_id"] for r in conn.execute(
+            "SELECT patient_id, COUNT(*) n FROM analyses GROUP BY patient_id HAVING n >= 2 "
+            "ORDER BY patient_id").fetchall()]
+        a = b = None
+        eye = request.args.get("eye", "").strip().upper()
+        rows = []
+        if pid:
+            q = "SELECT * FROM analyses WHERE patient_id=?" + (" AND eye=?" if eye else "")
+            args_ = (pid, eye) if eye else (pid,)
+            rows = conn.execute(q + " ORDER BY visit_date, created", args_).fetchall()
+            if len(rows) >= 2:
+                a, b = rows[-2], rows[-1]
+            elif rows:
+                b = rows[-1]
+        return render_template("compare.html", pid=pid, eye=eye, patients=patients, rows=rows,
+                               prev=a, cur=b, delta=_delta(a, b), cdr_flag=config.CDR_SUSPICIOUS,
+                               crit=progression.METRICS["vcdr"]["critical_change"])
+
+    # ------------------------------------------------------------ progression (Component 3)
+    @app.get("/progression")
+    def progression_page():
+        progression.refresh_thresholds()
+        pid = request.args.get("patient_id", "").strip()
+        conn = db()
+        patients = [r["patient_id"] for r in conn.execute(
+            "SELECT patient_id, COUNT(*) n FROM analyses GROUP BY patient_id HAVING n >= 2 "
+            "ORDER BY n DESC, patient_id").fetchall()]
+        rows, analysis = [], None
+        if pid:
+            rows = conn.execute("SELECT * FROM analyses WHERE patient_id=? ORDER BY visit_date, created",
+                                (pid,)).fetchall()
+            analysis = progression.analyze_patient(
+                [{"date": r["visit_date"], "eye": r["eye"], "vcdr": r["vcdr"],
+                  "md": r["md"] if "md" in r.keys() else None} for r in rows])
+        charts = {}
+        if analysis:
+            for eye, info in analysis["eyes"].items():
+                charts[eye] = {m: progression.chart(a) for m, a in info["metrics"].items()}
+        return render_template("progression.html", pid=pid, patients=patients, rows=rows,
+                               analysis=analysis, charts=charts, metrics=progression.METRICS,
+                               min_visits=progression.MIN_VISITS, min_span=progression.MIN_SPAN_YEARS)
+
+    @app.get("/api/progression/<patient_id>")
+    def api_progression(patient_id):
+        progression.refresh_thresholds()
+        rows = db().execute("SELECT * FROM analyses WHERE patient_id=? ORDER BY visit_date, created",
+                            (patient_id,)).fetchall()
+        if not rows:
+            return jsonify(error="unknown patient"), 404
+        return jsonify(patient_id=patient_id, schema_version="2.0",
+                       component3=progression.analyze_patient(
+                           [{"date": r["visit_date"], "eye": r["eye"], "vcdr": r["vcdr"],
+                             "md": r["md"] if "md" in r.keys() else None} for r in rows]))
+
+    @app.get("/api/calibration")
+    def api_calibration():
+        return jsonify(load_calibration())
 
     # ------------------------------------------------------------ visual field (PAPILA)
     VF_CSV = config.ROOT / "data" / "papila_vf_matched.csv"
@@ -252,8 +391,15 @@ def create_app(pipeline=None):
             "iop": rec.get("iop"),
         }}
         try:
+            def _num(v):
+                try:
+                    return None if v is None else float(v)
+                except (TypeError, ValueError):
+                    return None
+
             result = run_analysis(_File(), f"PAPILA-{m.group(1)}", m.group(2).upper(),
-                                  date.today().isoformat(), extra)
+                                  date.today().isoformat(), md=_num(rec.get("mean_defect")),
+                                  age=_num(rec.get("age")), iop=_num(rec.get("iop")), extra=extra)
         except (ValueError, RuntimeError) as e:
             return render_index(str(e), 400)
         return redirect(url_for("result", aid=result["analysis_id"]))

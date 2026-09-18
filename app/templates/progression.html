@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Progression · VisionTrack AI{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>{{ 'Progression — ' ~ pid if pid else 'Progression monitoring' }}</h1>
+    <p class="sub">Component 3 · trend of the optic nerve head and the visual field over time</p>
+  </div>
+  {% if pid %}
+  <div class="actions noprint">
+    <button class="btn" onclick="window.print()">Print</button>
+    <a class="btn" href="{{ url_for('api_progression', patient_id=pid) }}">Export JSON</a>
+    <a class="btn" href="{{ url_for('history', patient_id=pid) }}">Study history</a>
+  </div>
+  {% endif %}
+</div>
+
+<section class="panel">
+  <form class="panel-body searchbar" method="get">
+    <label class="field grow">
+      <span>Patient ID</span>
+      <input name="patient_id" list="plist" value="{{ pid }}" placeholder="Select a patient with two or more visits" autocomplete="off">
+      <datalist id="plist">{% for p in patients %}<option value="{{ p }}">{% endfor %}</datalist>
+    </label>
+    <button type="submit" class="btn primary">Analyse trend</button>
+  </form>
+  {% if not pid %}
+  {% if patients %}
+  <div class="chips">{% for p in patients %}<a class="chip" href="{{ url_for('progression_page', patient_id=p) }}">{{ p }}</a>{% endfor %}</div>
+  {% else %}
+  <div class="panel-body"><p class="muted">No patient has two or more studies yet. Analyse the same patient at
+    different visit dates and the trend appears here.</p></div>
+  {% endif %}
+  {% endif %}
+</section>
+
+{% if pid and not rows %}
+<div class="empty panel"><p><b>No studies found for “{{ pid }}”.</b></p></div>
+{% endif %}
+
+{% if analysis %}
+{% if analysis.summary %}
+<div class="notice {{ 'error' if analysis.summary.status_code == 'progressing' else ('warn' if analysis.summary.status_code == 'possible') }}">
+  <b>{{ analysis.summary.status }}</b> — worst eye {{ analysis.summary.eye }}. Verdicts combine a significant
+  trend with a change larger than the measurement error of the method.
+</div>
+{% endif %}
+
+{% for eye, info in analysis.eyes.items() %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>{{ 'OD (right eye)' if eye == 'OD' else ('OS (left eye)' if eye == 'OS' else eye) }}</h2>
+    <span class="tag lg prog-{{ info.status_code }}">{{ info.status }}</span>
+  </div>
+  <div class="panel-body">
+  {% for m, a in info.metrics.items() %}
+    {% set ch = charts.get(eye, {}).get(m) %}
+    <h3 class="minih">{{ a.label }}</h3>
+    {% if a.status_code == 'insufficient' %}
+      <p class="muted">{{ a.detail }}</p>
+      {% if a.n_visits >= 2 %}
+      <table class="kv flush">
+        <tr><th>Baseline</th><td>{{ a.baseline }}{{ a.unit }} on {{ a.first_visit }}</td></tr>
+        <tr><th>Latest</th><td>{{ a.latest }}{{ a.unit }} on {{ a.last_visit }}</td></tr>
+      </table>
+      {% endif %}
+    {% else %}
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-label">Rate of change</span>
+          <span class="kpi-value">{{ '%+.3f' % a.rate_per_year if m == 'vcdr' else '%+.2f' % a.rate_per_year }}{{ a.unit }}<small>/year</small></span></div>
+        <div class="kpi"><span class="kpi-label">Change from baseline</span>
+          <span class="kpi-value">{{ '%+.3f' % a.change if m == 'vcdr' else '%+.2f' % a.change }}{{ a.unit }}</span></div>
+        <div class="kpi"><span class="kpi-label">Trend significance</span>
+          <span class="kpi-value">p {{ '< 0.001' if a.p_value < 0.001 else '= %.3f' % a.p_value }}</span></div>
+        <div class="kpi"><span class="kpi-label">Follow-up</span>
+          <span class="kpi-value">{{ a.n_visits }}<small> visits · {{ a.span_years }} y</small></span></div>
+      </div>
+
+      {% if ch %}
+      <svg viewBox="0 0 {{ ch.w }} {{ ch.h }}" class="trend" role="img" aria-label="{{ a.label }} over time">
+        {% for t in ch.ticks %}
+          <line x1="{{ ch.left }}" x2="{{ ch.w - ch.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="gridline"/>
+          <text x="{{ ch.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end">{{ t.label }}</text>
+        {% endfor %}
+        <rect x="{{ ch.left }}" y="{{ [ch.noise.y_base, ch.noise.y_limit]|min }}" width="{{ ch.w - ch.left - ch.right }}"
+              height="{{ (ch.noise.y_base - ch.noise.y_limit)|abs }}" class="noiseband"></rect>
+        {% if ch.line %}<line x1="{{ ch.line.x1 }}" y1="{{ ch.line.y1 }}" x2="{{ ch.line.x2 }}" y2="{{ ch.line.y2 }}" class="fitline"/>{% endif %}
+        {% set ns = namespace(d='') %}
+        {% for p in ch.points %}{% set ns.d = ns.d ~ ('M' if loop.first else ' L') ~ p.x ~ ' ' ~ p.y %}{% endfor %}
+        <path d="{{ ns.d }}" class="series od"/>
+        {% for p in ch.points %}
+          <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4.5" class="pt od"><title>{{ p.date }} · {{ p.value }}{{ a.unit }}</title></circle>
+        {% endfor %}
+        {% for x in ch.xlabels %}<text x="{{ x.x }}" y="{{ ch.h - 8 }}" text-anchor="{{ 'start' if loop.first else 'end' }}">{{ x.label }}</text>{% endfor %}
+      </svg>
+      <p class="legend"><i class="ln od"></i>measured <i class="ln fit"></i>fitted trend
+        <i class="sw noise"></i>{{ ch.noise.label }}</p>
+      {% endif %}
+
+      <ul class="findings tight">
+        {% for reason in a.reasons %}<li>{{ reason }}</li>{% endfor %}
+        {% if a.projection %}
+        <li>At the current rate this eye reaches {{ a.projection.limit }}{{ a.unit }} in about
+          <b>{{ a.projection.years }} years</b>.</li>
+        {% endif %}
+      </ul>
+    {% endif %}
+  {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<section class="panel">
+  <div class="panel-head"><h2>Visits used</h2><span class="muted small">{{ rows|length }} studies</span></div>
+  <div class="tablewrap">
+    <table class="grid">
+      <thead><tr><th>Visit</th><th>Eye</th><th class="num">V-CDR</th><th class="num">Field MD</th>
+        <th>Stage</th><th class="num">Glaucoma prob.</th><th>Study</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="rowlink" onclick="location.href='{{ url_for('result', aid=r.id) }}'">
+          <td class="nowrap">{{ r.visit_date }}</td><td>{{ r.eye }}</td>
+          <td class="num strong">{{ '%.3f' % r.vcdr if r.vcdr is not none else '—' }}</td>
+          <td class="num">{{ '%+.2f dB' % r.md if r.md is not none else '—' }}</td>
+          <td>{% if r.stage_label %}<span class="tag st{{ r.stage }}">{{ r.stage_label }}</span>{% endif %}</td>
+          <td class="num">{{ '%.1f%%' % (r.prob * 100) if r.prob is not none else '—' }}</td>
+          <td><a class="mono" href="{{ url_for('result', aid=r.id) }}">{{ r.id[:8] }}</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="panel-note">A verdict needs at least {{ min_visits }} visits spanning {{ min_span }} years. The
+    measurement-error limit for the cup-to-disc ratio is taken from the model-versus-expert agreement measured on the
+    unified cohort, not from a textbook value.</p>
+</section>
+{% endif %}
+{% endblock %}

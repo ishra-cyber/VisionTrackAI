@@ -34,6 +34,18 @@
           <span>Visit date</span>
           <input type="date" name="visit_date" value="{{ today }}">
         </label>
+        <label class="field">
+          <span>Visual field MD <small class="muted">(dB, optional)</small></span>
+          <input type="number" name="mean_defect" step="0.01" min="-35" max="5" placeholder="leave blank to estimate">
+        </label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Age <small class="muted">(optional)</small></span>
+          <input type="number" name="age" min="0" max="120" step="1" placeholder="years"></label>
+        <label class="field"><span>IOP <small class="muted">(mmHg, optional)</small></span>
+          <input type="number" name="iop" min="0" max="80" step="0.1" placeholder="mmHg"></label>
+        <label class="field"><span>Axial length <small class="muted">(mm, optional)</small></span>
+          <input type="number" name="axial_length" min="15" max="40" step="0.01" placeholder="for mm² sizing"></label>
       </div>
       <div class="field">
         <span>Fundus image</span>
@@ -44,7 +56,7 @@
         </label>
       </div>
       <button type="submit" class="btn primary block" id="go" {{ 'disabled' if not model_ready }}>Run analysis</button>
-      <p class="hint">Pipeline: CLAHE enhancement &rarr; U-Net optic disc &amp; cup segmentation &rarr; CDR measurement &rarr; EfficientNet-B0 glaucoma risk.</p>
+      <p class="hint">Pipeline: CLAHE enhancement &rarr; U-Net optic disc &amp; cup segmentation &rarr; CDR measurement &rarr; EfficientNet-B0 glaucoma risk &rarr; neuroretinal rim &amp; ISNT &rarr; CDR + visual-field staging. If no Mean Defect is entered, the visual field is estimated from the image and clearly marked as an estimate. Age, IOP and axial length are optional: they sharpen the visual-field estimate and let disc size be reported in mm².</p>
     </form>
   </section>
 

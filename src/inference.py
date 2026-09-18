@@ -14,11 +14,13 @@ import torch.nn.functional as F
 import config
 from .cdr import compute_cdr
 from .models import load_classifier, load_unet
+from .optics import physical_sizes
 from .postprocess import clean_masks
+from .rim import rim_analysis, rim_findings
 from .preprocessing import prepare_cls_input, prepare_seg_input
 from .visualize import crop_roi, make_overlay  # noqa: F401  (re-exported)
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 
 
 def load_thresholds():
@@ -76,10 +78,12 @@ class VisionTrackPipeline:
             p = (p + torch.sigmoid(self.cls(torch.flip(x, dims=[3]))).item()) / 2
         return float(p)
 
-    def analyze(self, rgb, image_id="image"):
+    def analyze(self, rgb, image_id="image", eye="OD", axial_length_mm=None):
         disc, cup = self.segment(rgb)
         cdr = compute_cdr(disc, cup)
         prob = self.glaucoma_probability(rgb)
+        rim = rim_analysis(disc, cup, eye)
+        sizes = physical_sizes(cdr, rgb.shape[1], axial_length_mm)
 
         flags = []
         if disc.sum() == 0:
@@ -89,6 +93,12 @@ class VisionTrackPipeline:
         vcdr = cdr["vertical_cdr"]
         if vcdr is not None and vcdr >= config.CDR_SUSPICIOUS:
             flags.append(f"Vertical CDR >= {config.CDR_SUSPICIOUS} (suspicious cupping)")
+        if rim and not rim["isnt_respected"]:
+            flags.append("Neuroretinal rim does not follow the ISNT rule")
+        if rim and rim["min_rim_to_disc_ratio"] is not None and rim["min_rim_to_disc_ratio"] < 0.10:
+            flags.append(f"Focal rim thinning in the {rim['min_rim_sector']} sector")
+        if sizes and not sizes["plausible"]:
+            flags.append("Physical size estimate outside the usual range - check the camera assumptions")
 
         classification = None
         if prob is not None:
@@ -105,7 +115,9 @@ class VisionTrackPipeline:
             "image_id": image_id,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "image_size": [int(rgb.shape[1]), int(rgb.shape[0])],
-            "component1": {"disc_center_xy": center, "cdr": cdr},
+            "component1": {"disc_center_xy": center, "cdr": cdr, "rim": rim,
+                           "physical": sizes,
+                           "rim_findings": rim_findings(rim, cdr.get("vertical_cdr"))},
             "classification": classification,
             "flags": flags,
             "disclaimer": "Research prototype - not for clinical diagnosis.",
